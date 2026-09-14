@@ -16,45 +16,82 @@ jobs:
           const project = "6aa6f346003cb3186f6e";
           const apiKey = process.env.APPWRITE_API_KEY;
           const db = "motogasto";
+
           if (!apiKey) throw new Error("Secret APPWRITE_API_KEY não configurado.");
 
-          const headers={
-            "Content-Type":"application/json","Accept":"application/json",
-            "X-Appwrite-Project":project,"X-Appwrite-Key":apiKey,"X-Appwrite-Response-Format":"2.0.0"
+          const headers = {
+            "Content-Type":"application/json",
+            "Accept":"application/json",
+            "X-Appwrite-Project":project,
+            "X-Appwrite-Key":apiKey,
+            "X-Appwrite-Response-Format":"2.0.0"
           };
 
-          async function req(path,method="GET",body){
-            const r=await fetch(endpoint+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
-            const t=await r.text(); let d={}; try{d=t?JSON.parse(t):{}}catch{}
-            if(r.ok||r.status===409)return d;
-            throw new Error(`${method} ${path} -> ${r.status}: ${d.message||t}`);
+          async function req(path, method="GET", body) {
+            const r = await fetch(endpoint + path, {
+              method,
+              headers,
+              body: body === undefined ? undefined : JSON.stringify(body)
+            });
+            const t = await r.text();
+            let d = {};
+            try { d = t ? JSON.parse(t) : {}; } catch {}
+            if (r.ok || r.status === 409) return d;
+            throw new Error(`${method} ${path} -> ${r.status}: ${d.message || t}`);
           }
-          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-          async function table(id,name){
-            await req(`/tablesdb/${db}/tables`,"POST",{tableId:id,name,permissions:['create("users")'],rowSecurity:true,enabled:true});
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+          async function table(id, name) {
+            await req(`/tablesdb/${db}/tables`, "POST", {
+              tableId:id,
+              name,
+              permissions:['create("users")'],
+              rowSecurity:true,
+              enabled:true
+            });
           }
-          async function varchar(t,k,size,required=false){
-            await req(`/tablesdb/${db}/tables/${t}/columns/varchar`,"POST",{key:k,size,required,array:false});
+
+          async function varchar(t,k,size,required=false) {
+            await req(`/tablesdb/${db}/tables/${t}/columns/varchar`, "POST", {
+              key:k,size,required,array:false
+            });
           }
-          async function text(t,k,required=false){
-            await req(`/tablesdb/${db}/tables/${t}/columns/text`,"POST",{key:k,required,array:false});
+
+          async function text(t,k,required=false) {
+            await req(`/tablesdb/${db}/tables/${t}/columns/text`, "POST", {
+              key:k,required,array:false
+            });
           }
-          async function float(t,k,required=false){
-            await req(`/tablesdb/${db}/tables/${t}/columns/float`,"POST",{key:k,required,array:false});
+
+          async function float(t,k,required=false) {
+            await req(`/tablesdb/${db}/tables/${t}/columns/float`, "POST", {
+              key:k,required,array:false
+            });
           }
-          async function integer(t,k,required=false){
-            await req(`/tablesdb/${db}/tables/${t}/columns/integer`,"POST",{key:k,required,array:false});
+
+          async function integer(t,k,required=false) {
+            await req(`/tablesdb/${db}/tables/${t}/columns/integer`, "POST", {
+              key:k,required,array:false
+            });
           }
-          async function idx(t,k,attrs){
-            for(let i=0;i<10;i++){
-              try{await req(`/tablesdb/${db}/tables/${t}/indexes`,"POST",{key:k,type:"key",attributes:attrs,orders:attrs.map(()=> "ASC")});return}
-              catch(e){if(i===9)throw e;await sleep(2000)}
+
+          async function idx(t,k,attrs) {
+            for (let i=0;i<10;i++) {
+              try {
+                await req(`/tablesdb/${db}/tables/${t}/indexes`, "POST", {
+                  key:k,type:"key",attributes:attrs,orders:attrs.map(()=> "ASC")
+                });
+                return;
+              } catch (e) {
+                if (i===9) throw e;
+                await sleep(2000);
+              }
             }
           }
 
-          async function main(){
-            await req("/tablesdb","POST",{databaseId:db,name:"MotoGasto",enabled:true});
+          async function main() {
+            // O banco "motogasto" já existe. Não tenta criar outro banco.
 
             await table("produtos","Produtos e Serviços");
             await table("checkins","Check-ins Vistoria");
@@ -96,8 +133,12 @@ jobs:
             await idx("checkin_itens","idx_item_user",["userId"]);
             await idx("checkin_itens","idx_item_checkin",["checkinId"]);
             await idx("checkin_itens","idx_item_placa",["placa"]);
+
             console.log("MOTOGASTO VISTORIA CONFIGURADO COM SUCESSO");
           }
 
-          main().catch(e=>{console.error(e);process.exit(1)});
+          main().catch(e => {
+            console.error(e);
+            process.exit(1);
+          });
           NODE
