@@ -1,0 +1,9 @@
+{
+  "name": "MotoGasto AI",
+  "short_name": "MotoGasto",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
+  "icons": []
+}
