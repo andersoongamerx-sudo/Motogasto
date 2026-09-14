@@ -80,7 +80,7 @@ jobs:
             for (let i=0;i<10;i++) {
               try {
                 await req(`/tablesdb/${db}/tables/${t}/indexes`, "POST", {
-                  key:k,type:"key",attributes:attrs,orders:attrs.map(()=> "ASC")
+                  key:k,type:"key",columns:attrs,orders:attrs.map(()=> "ASC")
                 });
                 return;
               } catch (e) {
