@@ -1,18 +1,260 @@
-import { Client, Account, TablesDB, ID, Query, Permission, Role, Functions } from "https://cdn.jsdelivr.net/npm/appwrite@latest/+esm";
-const ENDPOINT="https://nyc.cloud.appwrite.io/v1",PROJECT_ID="6aa6f346003cb3186f6e",DATABASE_ID="motogasto";const T={motos:"motos",produtos:"produtos",lancamentos:"lancamentos"};
-const client=new Client().setEndpoint(ENDPOINT).setProject(PROJECT_ID);const account=new Account(client),db=new TablesDB(client),functions=new Functions(client);let user=null,motos=[],products=[];const $=s=>document.querySelector(s),plateNorm=p=>(p||"").toUpperCase().replace(/[^A-Z0-9]/g,""),todayISO=()=>new Date().toISOString().slice(0,10),money=v=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-async function list(t,q=[]){let r=await db.listRows({databaseId:DATABASE_ID,tableId:t,queries:[Query.equal("userId",user.$id),...q]});return r.rows||[]}
-async function refresh(){[motos,products]=await Promise.all([list(T.motos),list(T.produtos)]);render();}
-function render(){$('#motosList').innerHTML=motos.map(m=>`<div class="item"><b>${m.placa}</b> — ${m.modelo||''} ${m.cor||''}</div>`).join('')||'Nenhuma moto.';$('#productsList').innerHTML=products.map(p=>`<div class="item"><b>${p.nome}</b> <span class="badge">${p.tipo}</span><br>${money(p.valor)} <span class="muted">${p.apelidos||''}</span></div>`).join('')||'Nenhum produto.';$('#manualProduct').innerHTML='<option value="">Selecione...</option>'+products.map(p=>`<option value="${p.$id}">${p.nome} — ${money(p.valor)}</option>`).join('')}
-async function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#who').textContent=user.email;await refresh()}function showLogin(){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden')}
-$('#loginBtn').onclick=async()=>{try{await account.createEmailPasswordSession({email:$('#email').value,password:$('#password').value});user=await account.get();showApp()}catch(e){$('#loginMsg').textContent=e.message}};$('#signupBtn').onclick=async()=>{try{await account.create({userId:ID.unique(),email:$('#email').value,password:$('#password').value});$('#loginBtn').click()}catch(e){$('#loginMsg').textContent=e.message}};$('#logoutBtn').onclick=async()=>{await account.deleteSession({sessionId:'current'});showLogin()};
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.section').forEach(s=>s.classList.add('hidden'));$('#'+b.dataset.tab).classList.remove('hidden');document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));if(b.dataset.tab==='relatorios')loadReport()});
-$('#saveMotoBtn').onclick=async()=>{let placa=plateNorm($('#motoPlate').value);if(!placa)return alert('Digite a placa');await db.createRow({databaseId:DATABASE_ID,tableId:T.motos,rowId:ID.unique(),data:{userId:user.$id,placa,modelo:$('#motoModel').value,cor:$('#motoColor').value,observacao:$('#motoObs').value},permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]});await refresh();alert('Moto salva')};
-$('#saveProdBtn').onclick=async()=>{let nome=$('#prodName').value.trim(),valor=Number($('#prodPrice').value);if(!nome||isNaN(valor))return alert('Informe nome e valor');await db.createRow({databaseId:DATABASE_ID,tableId:T.produtos,rowId:ID.unique(),data:{userId:user.$id,nome,tipo:$('#prodType').value,valor,apelidos:$('#prodAliases').value},permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]});await refresh();alert('Produto salvo')};
-async function saveLaunch(placa,itens,origem='manual',texto=''){let total=itens.reduce((s,i)=>s+Number(i.subtotal),0);await db.createRow({databaseId:DATABASE_ID,tableId:T.lancamentos,rowId:ID.unique(),data:{userId:user.$id,placa,data:todayISO(),itensJson:JSON.stringify(itens),total,origem,textoOriginal:texto},permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]})}
-$('#manualAddBtn').onclick=async()=>{let placa=plateNorm($('#manualPlate').value),p=products.find(x=>x.$id===$('#manualProduct').value),q=Number($('#manualQty').value||1);if(!motos.some(m=>m.placa===placa))return alert('Placa não cadastrada');if(!p)return alert('Selecione um produto');await saveLaunch(placa,[{productId:p.$id,nome:p.nome,quantidade:q,valorUnitario:Number(p.valor),subtotal:q*Number(p.valor)}]);alert('Lançamento salvo')};
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(SR){let r=new SR();r.lang='pt-BR';r.onresult=e=>$('#spokenText').value=e.results[0][0].transcript;r.onend=()=>$('#micBtn').textContent='🎙️ Falar novamente';$('#micBtn').onclick=()=>{r.start();$('#micBtn').textContent='🎙️ Ouvindo...'}}else $('#micBtn').onclick=()=>alert('Use Chrome/Edge em HTTPS ou localhost para voz.');
-function localInterpret(text){let flat=text.toUpperCase().replace(/[^A-Z0-9]/g,''),placa=(motos.find(m=>flat.includes(m.placa))||{}).placa||null,itens=[];for(let p of products){let terms=[p.nome,...(p.apelidos||'').split(',')].map(x=>x.trim()).filter(Boolean);if(terms.some(t=>text.toUpperCase().includes(t.toUpperCase())))itens.push({productId:p.$id,nome:p.nome,quantidade:1,valorUnitario:Number(p.valor),subtotal:Number(p.valor)})}return{plate:placa,items:itens,warnings:['Modo de segurança local: confira quantidades.']}}
-$('#interpretBtn').onclick=async()=>{let text=$('#spokenText').value.trim();if(!text)return;let data;try{let ex=await functions.createExecution({functionId:'interpretar-voz',body:JSON.stringify({text}),async:false});data=JSON.parse(ex.responseBody||'{}')}catch(e){data=localInterpret(text)}let placa=plateNorm(data.plate||''),itens=(data.items||[]).map(i=>{let p=products.find(x=>x.$id===i.productId)||products.find(x=>x.nome.toLowerCase()===(i.nome||'').toLowerCase());if(!p)return null;let q=Number(i.quantidade||1);return{productId:p.$id,nome:p.nome,quantidade:q,valorUnitario:Number(p.valor),subtotal:q*Number(p.valor)}}).filter(Boolean);let valid=motos.some(m=>m.placa===placa);$('#interpretResult').innerHTML=`<div class="${valid&&itens.length?'ok':'warn'}"><b>Placa:</b> ${placa||'não identificada'}<br>${itens.map(i=>`${i.quantidade}x ${i.nome} — ${money(i.subtotal)}`).join('<br>')}<br><b>Total: ${money(itens.reduce((s,i)=>s+i.subtotal,0))}</b></div>`+(valid&&itens.length?'<button id="confirmAI" class="success">Confirmar e salvar</button>':'');if($('#confirmAI'))$('#confirmAI').onclick=async()=>{await saveLaunch(placa,itens,'ia',text);alert('Salvo com sucesso')}};
-async function rows(date,placa=''){let q=[Query.equal('data',date)];if(placa)q.push(Query.equal('placa',plateNorm(placa)));return list(T.lancamentos,q)}function showRows(r,el){let total=0;el.innerHTML=r.map(x=>{total+=Number(x.total);let it=JSON.parse(x.itensJson||'[]');return `<div class="item"><b>${x.placa}</b> — ${money(x.total)}<br>${it.map(i=>`${i.quantidade}x ${i.nome}`).join(', ')}</div>`}).join('')+`<div class="big">Total: ${money(total)}</div>`}
-$('#todayBtn').onclick=async()=>showRows(await rows(todayISO(),$('#searchPlate').value),$('#todayResult'));async function loadReport(){let r=await rows($('#reportDate').value||todayISO());window._rows=r;showRows(r,$('#reportResult'))}$('#loadReportBtn').onclick=loadReport;$('#exportBtn').onclick=()=>{let csv='Data;Placa;Itens;Total\n';for(let r of (window._rows||[]))csv+=`${r.data};${r.placa};"${JSON.parse(r.itensJson||'[]').map(i=>`${i.quantidade}x ${i.nome}`).join(', ')}";${Number(r.total).toFixed(2).replace('.',',')}\n`;let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='motogasto.csv';a.click()};$('#reportDate').value=todayISO();try{user=await account.get();showApp()}catch{showLogin()}
+
+import { Client, Account, TablesDB, ID, Query, Permission, Role } from 'https://cdn.jsdelivr.net/npm/appwrite@latest/+esm';
+
+const ENDPOINT="https://nyc.cloud.appwrite.io/v1";
+const PROJECT="6aa6f346003cb3186f6e";
+const DB="motogasto";
+const T={produtos:'produtos',checkins:'checkins',itens:'checkin_itens'};
+
+const client=new Client().setEndpoint(ENDPOINT).setProject(PROJECT);
+const account=new Account(client);
+const db=new TablesDB(client);
+
+let user=null, products=[], currentItems=[];
+const $=s=>document.querySelector(s);
+const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const plateNorm=p=>(p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const today=()=>new Date().toISOString().slice(0,10);
+
+function bind(){
+  $('#loginBtn').onclick=login; $('#signupBtn').onclick=signup; $('#logoutBtn').onclick=logout;
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+  $('#saveProdBtn').onclick=saveProduct;
+  $('#serviceProduct').onchange=productChanged;
+  $('#addServiceBtn').onclick=addService;
+  $('#saveCheckinBtn').onclick=saveCheckin;
+  $('#applyVoiceBtn').onclick=applyVoice;
+  $('#searchHistoryBtn').onclick=searchHistory;
+  $('#loadReportBtn').onclick=loadReport;
+  $('#exportBtn').onclick=exportCSV;
+  setupMic();
+}
+
+function switchTab(id){
+  document.querySelectorAll('.section').forEach(x=>x.classList.add('hidden'));
+  $('#'+id).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));
+  if(id==='relatorios')loadReport();
+}
+
+async function login(){
+  try{
+    await account.createEmailPasswordSession({email:$('#email').value,password:$('#password').value});
+    user=await account.get(); await showApp();
+  }catch(e){$('#loginMsg').textContent=e.message}
+}
+async function signup(){
+  try{
+    await account.create({userId:ID.unique(),email:$('#email').value,password:$('#password').value});
+    await login();
+  }catch(e){$('#loginMsg').textContent=e.message}
+}
+async function logout(){try{await account.deleteSession({sessionId:'current'})}catch{};location.reload()}
+
+async function list(table, queries=[]){
+  const r=await db.listRows({databaseId:DB,tableId:table,queries:[Query.equal('userId',user.$id),...queries]});
+  return r.rows||[];
+}
+
+async function showApp(){
+  $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
+  $('#who').textContent=user.email;
+  $('#checkinDate').value=today(); $('#reportDate').value=today();
+  await refreshProducts();
+}
+
+async function refreshProducts(){
+  products=await list(T.produtos);
+  $('#serviceProduct').innerHTML='<option value="">Selecione um produto/serviço</option>'+products.map(p=>`<option value="${p.$id}">${p.nome} — ${money(p.valor)}</option>`).join('');
+  $('#productsList').innerHTML=products.length?products.map(p=>`<div class="item"><b>${p.nome}</b> <span class="pill">${p.tipo}</span><br>${money(p.valor)}<br><span class="muted">${p.apelidos||''}</span></div>`).join(''):'Nenhum produto cadastrado.';
+}
+
+async function saveProduct(){
+  const nome=$('#prodName').value.trim(),valor=Number($('#prodPrice').value);
+  if(!nome||isNaN(valor)) return alert('Informe nome e valor.');
+  await db.createRow({
+    databaseId:DB,tableId:T.produtos,rowId:ID.unique(),
+    data:{userId:user.$id,nome,tipo:$('#prodType').value,valor,apelidos:$('#prodAliases').value},
+    permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]
+  });
+  $('#prodName').value=$('#prodPrice').value=$('#prodAliases').value='';
+  await refreshProducts();
+}
+
+function productChanged(){
+  const p=products.find(x=>x.$id===$('#serviceProduct').value);
+  if(p) $('#servicePrice').value=Number(p.valor).toFixed(2);
+}
+
+function addService(){
+  const p=products.find(x=>x.$id===$('#serviceProduct').value);
+  const qty=Number($('#serviceQty').value||1);
+  const price=Number($('#servicePrice').value);
+  if(!p) return alert('Selecione um produto/serviço.');
+  if(!qty||isNaN(price)) return alert('Confira quantidade e valor.');
+  currentItems.push({productId:p.$id,nome:p.nome,quantidade:qty,valorUnitario:price,subtotal:qty*price});
+  renderItems();
+}
+
+function renderItems(){
+  $('#servicesList').innerHTML=currentItems.map((i,idx)=>`<div class="service-row">
+    <div><b>${i.nome}</b></div>
+    <div>${i.quantidade}x</div>
+    <div>${money(i.subtotal)}</div>
+    <button class="danger" data-del="${idx}">×</button>
+  </div>`).join('');
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{currentItems.splice(Number(b.dataset.del),1);renderItems()});
+  $('#checkinTotal').textContent=money(currentItems.reduce((s,i)=>s+i.subtotal,0));
+}
+
+async function saveCheckin(){
+  const owner=$('#ownerName').value.trim();
+  const model=$('#motoModel').value.trim();
+  const plate=plateNorm($('#plate').value);
+  const pilot=$('#pilotName').value.trim();
+  const km=Number($('#km').value);
+  const date=$('#checkinDate').value||today();
+  const time=$('#arrivalTime').value||'';
+  if(!owner||!model||!plate||!pilot||!km) return alert('Preencha dono, modelo, placa, piloto e KM.');
+  if(!currentItems.length) return alert('Adicione pelo menos um serviço/produto.');
+
+  const total=currentItems.reduce((s,i)=>s+i.subtotal,0);
+  const checkinId=ID.unique();
+
+  await db.createRow({
+    databaseId:DB,tableId:T.checkins,rowId:checkinId,
+    data:{
+      userId:user.$id,dono:owner,modelo:model,placa:plate,piloto:pilot,km,
+      data:date,horaChegada:time,total,observacao:$('#checkinObs').value
+    },
+    permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]
+  });
+
+  for(const item of currentItems){
+    await db.createRow({
+      databaseId:DB,tableId:T.itens,rowId:ID.unique(),
+      data:{
+        userId:user.$id,checkinId,placa:plate,data:date,
+        productId:item.productId,nome:item.nome,quantidade:item.quantidade,
+        valorUnitario:item.valorUnitario,subtotal:item.subtotal
+      },
+      permissions:[Permission.read(Role.user(user.$id)),Permission.update(Role.user(user.$id)),Permission.delete(Role.user(user.$id))]
+    });
+  }
+
+  alert('Check-in salvo com sucesso.');
+  clearCheckin();
+}
+
+function clearCheckin(){
+  $('#ownerName').value=$('#motoModel').value=$('#plate').value=$('#pilotName').value=$('#km').value=$('#arrivalTime').value=$('#checkinObs').value='';
+  $('#checkinDate').value=today();
+  currentItems=[];renderItems();
+}
+
+function setupMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$('#micBtn').textContent='🎙️ Voz não suportada neste navegador';$('#micBtn').disabled=true;return}
+  const r=new SR();r.lang='pt-BR';r.interimResults=false;r.continuous=false;
+  r.onresult=e=>$('#voiceText').value=e.results[0][0].transcript;
+  r.onerror=e=>alert('Erro de voz: '+e.error);
+  $('#micBtn').onclick=()=>{r.start();$('#micBtn').textContent='🎙️ Ouvindo...'};
+  r.onend=()=>$('#micBtn').textContent='🎙️ Falar';
+}
+
+const numWords={um:1,uma:1,dois:2,duas:2,'três':3,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10};
+function qtyBefore(text,term){
+  const idx=text.toLowerCase().indexOf(term.toLowerCase());if(idx<0)return 1;
+  const left=text.slice(Math.max(0,idx-30),idx).toLowerCase();
+  const m=left.match(/(\d+|um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*$/);
+  return m?(Number(m[1])||numWords[m[1]]||1):1;
+}
+
+function extractField(text,labelPatterns){
+  for(const re of labelPatterns){
+    const m=text.match(re); if(m) return m[1].trim();
+  }
+  return '';
+}
+
+function applyVoice(){
+  const text=$('#voiceText').value.trim();
+  if(!text) return alert('Fale ou digite as informações.');
+
+  const plateMatch=text.toUpperCase().match(/\b[A-Z]{3}\s*[- ]?\s*[0-9A-Z]{4}\b/);
+  const owner=extractField(text,[/dono(?: da moto)?\s+([^,.;]+)/i]);
+  const pilot=extractField(text,[/piloto\s+([^,.;]+)/i,/condutor\s+([^,.;]+)/i]);
+  const model=extractField(text,[/moto(?: modelo)?\s+([^,.;]+)/i,/modelo\s+([^,.;]+)/i]);
+  const kmMatch=text.match(/(?:km|quilometragem)\s*[:\-]?\s*([\d\.]+)/i);
+
+  if(owner) $('#ownerName').value=owner;
+  if(pilot) $('#pilotName').value=pilot;
+  if(model) $('#motoModel').value=model;
+  if(plateMatch) $('#plate').value=plateNorm(plateMatch[0]);
+  if(kmMatch) $('#km').value=kmMatch[1].replace(/\./g,'');
+
+  let found=[];
+  for(const p of products){
+    const terms=[p.nome,...(p.apelidos||'').split(',')].map(x=>x.trim()).filter(Boolean);
+    const term=terms.find(t=>text.toLowerCase().includes(t.toLowerCase()));
+    if(term){
+      const q=qtyBefore(text,term);
+      let price=Number(p.valor);
+      const after=text.slice(text.toLowerCase().indexOf(term.toLowerCase())+term.length, text.toLowerCase().indexOf(term.toLowerCase())+term.length+30);
+      const priceMatch=after.match(/(?:r\$\s*)?(\d+(?:[,.]\d{1,2})?)\s*(?:reais|real)?/i);
+      if(priceMatch) price=Number(priceMatch[1].replace(',','.'));
+      found.push({productId:p.$id,nome:p.nome,quantidade:q,valorUnitario:price,subtotal:q*price});
+    }
+  }
+
+  if(found.length){currentItems.push(...found);renderItems();}
+  $('#voiceResult').innerHTML='<div class="ok">Informações reconhecidas foram colocadas no CHECK-IN. Confira antes de salvar.</div>';
+  switchTab('checkin');
+}
+
+async function searchHistory(){
+  const plate=plateNorm($('#historyPlate').value);
+  if(!plate) return alert('Digite a placa.');
+  const rows=await list(T.checkins,[Query.equal('placa',plate),Query.orderDesc('data')]);
+  if(!rows.length){$('#historyResult').innerHTML='<p class="muted">Nenhum check-in encontrado.</p>';return}
+  const html=[];
+  for(const c of rows){
+    const items=await list(T.itens,[Query.equal('checkinId',c.$id)]);
+    html.push(`<div class="item">
+      <b>${c.data} — ${c.placa}</b><br>
+      Dono: ${c.dono}<br>
+      Moto: ${c.modelo}<br>
+      Piloto: ${c.piloto}<br>
+      KM: ${Number(c.km).toLocaleString('pt-BR')}<br>
+      Hora chegada: ${c.horaChegada||'-'}<br><br>
+      <b>Serviços:</b><br>
+      ${items.map(i=>`${i.quantidade}x ${i.nome} — ${money(i.subtotal)}`).join('<br>')}
+      <hr><b>Total: ${money(c.total)}</b>
+    </div>`);
+  }
+  $('#historyResult').innerHTML=html.join('');
+}
+
+async function loadReport(){
+  const date=$('#reportDate').value||today();
+  const rows=await list(T.checkins,[Query.equal('data',date),Query.orderDesc('$createdAt')]);
+  window._reportRows=rows;
+  if(!rows.length){$('#reportResult').innerHTML='<p class="muted">Nenhum check-in no dia.</p>';return}
+  let total=0;
+  $('#reportResult').innerHTML=rows.map(c=>{total+=Number(c.total);return `<div class="item"><b>${c.placa}</b> — ${c.modelo}<br>Piloto: ${c.piloto} | KM: ${Number(c.km).toLocaleString('pt-BR')}<br>Total: ${money(c.total)}</div>`}).join('')+`<div class="big">TOTAL DO DIA: ${money(total)}</div>`;
+}
+
+function exportCSV(){
+  const rows=window._reportRows||[];
+  let csv='Data;Placa;Dono;Modelo;Piloto;KM;Hora Chegada;Total\n';
+  for(const c of rows) csv+=`${c.data};${c.placa};"${c.dono}";"${c.modelo}";"${c.piloto}";${c.km};${c.horaChegada||''};${Number(c.total).toFixed(2).replace('.',',')}\n`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`motogasto-${$('#reportDate').value||today()}.csv`;a.click();
+}
+
+async function boot(){
+  bind(); $('#checkinDate').value=today(); $('#reportDate').value=today();
+  try{user=await account.get();await showApp()}catch{}
+}
+boot();

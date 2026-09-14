@@ -1,9 +1,9 @@
 {
-  "name": "MotoGasto AI",
+  "name": "MotoGasto Vistoria",
   "short_name": "MotoGasto",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0d0f12",
-  "theme_color": "#0d0f12",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
   "icons": []
 }
