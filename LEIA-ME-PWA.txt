@@ -1,0 +1,27 @@
+MOTOGASTO - CORREÇÃO PWA
+
+Esta atualização corrige:
+- ícone genérico do Chrome
+- abertura como atalho comum
+- modo standalone (sem barra do navegador quando instalado como PWA)
+- manifest com scope/start_url corretos para /Motogasto/
+- service worker
+- ícones 192x192 e 512x512
+- suporte de instalação no Android
+
+ARQUIVOS NOVOS/ALTERADOS:
+- index.html
+- manifest.json
+- sw.js
+- icon-192.png
+- icon-512.png
+
+COMO APLICAR:
+1. Envie/substitua esses arquivos na raiz do repositório Motogasto.
+2. Aguarde o GitHub Pages terminar o deploy.
+3. NO CELULAR: remova o atalho antigo MotoGasto da tela inicial.
+4. Abra https://andersoongamerx-sudo.github.io/Motogasto/ no Chrome.
+5. Menu ⋮ > Instalar app / Adicionar à tela inicial.
+6. Se aparecer "Instalar", escolha Instalar.
+
+O atalho antigo precisa ser removido porque ele foi criado antes do PWA estar completo.

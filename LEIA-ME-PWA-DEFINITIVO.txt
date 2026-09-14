@@ -1,0 +1,24 @@
+MOTOGASTO PWA DEFINITIVO
+
+Substitua/adicione NA RAIZ do repositório:
+- index.html
+- manifest.json
+- sw.js
+- pwa-install.js
+- icon-192.png
+- icon-512.png
+
+Depois aguarde o GitHub Pages concluir o deploy.
+
+NO CELULAR (importante por causa do PWA antigo):
+1. Remova o ícone/atalho MotoGasto antigo.
+2. Chrome > Configurações > Configurações do site > Todos os sites.
+3. Procure andersoongamerx-sudo.github.io e limpe os dados armazenados.
+4. Feche o Chrome completamente.
+5. Abra novamente:
+   https://andersoongamerx-sudo.github.io/Motogasto/
+6. Entre no MotoGasto.
+7. O próprio sistema deverá mostrar o botão “INSTALAR MOTOGASTO” quando o Chrome liberar a instalação.
+8. Toque no botão e confirme INSTALAR.
+
+Se o botão ainda não surgir, o aviso na própria tela informará o estado do Service Worker/PWA.
