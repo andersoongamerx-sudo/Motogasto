@@ -1,0 +1,103 @@
+name: Configurar MotoGasto Vistoria
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Criar estrutura no Appwrite
+        env:
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        run: |
+          node <<'NODE'
+          const endpoint = "https://nyc.cloud.appwrite.io/v1";
+          const project = "6aa6f346003cb3186f6e";
+          const apiKey = process.env.APPWRITE_API_KEY;
+          const db = "motogasto";
+          if (!apiKey) throw new Error("Secret APPWRITE_API_KEY não configurado.");
+
+          const headers={
+            "Content-Type":"application/json","Accept":"application/json",
+            "X-Appwrite-Project":project,"X-Appwrite-Key":apiKey,"X-Appwrite-Response-Format":"2.0.0"
+          };
+
+          async function req(path,method="GET",body){
+            const r=await fetch(endpoint+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+            const t=await r.text(); let d={}; try{d=t?JSON.parse(t):{}}catch{}
+            if(r.ok||r.status===409)return d;
+            throw new Error(`${method} ${path} -> ${r.status}: ${d.message||t}`);
+          }
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+          async function table(id,name){
+            await req(`/tablesdb/${db}/tables`,"POST",{tableId:id,name,permissions:['create("users")'],rowSecurity:true,enabled:true});
+          }
+          async function varchar(t,k,size,required=false){
+            await req(`/tablesdb/${db}/tables/${t}/columns/varchar`,"POST",{key:k,size,required,array:false});
+          }
+          async function text(t,k,required=false){
+            await req(`/tablesdb/${db}/tables/${t}/columns/text`,"POST",{key:k,required,array:false});
+          }
+          async function float(t,k,required=false){
+            await req(`/tablesdb/${db}/tables/${t}/columns/float`,"POST",{key:k,required,array:false});
+          }
+          async function integer(t,k,required=false){
+            await req(`/tablesdb/${db}/tables/${t}/columns/integer`,"POST",{key:k,required,array:false});
+          }
+          async function idx(t,k,attrs){
+            for(let i=0;i<10;i++){
+              try{await req(`/tablesdb/${db}/tables/${t}/indexes`,"POST",{key:k,type:"key",attributes:attrs,orders:attrs.map(()=> "ASC")});return}
+              catch(e){if(i===9)throw e;await sleep(2000)}
+            }
+          }
+
+          async function main(){
+            await req("/tablesdb","POST",{databaseId:db,name:"MotoGasto",enabled:true});
+
+            await table("produtos","Produtos e Serviços");
+            await table("checkins","Check-ins Vistoria");
+            await table("checkin_itens","Itens do Check-in");
+
+            await varchar("produtos","userId",64,true);
+            await varchar("produtos","nome",200,true);
+            await varchar("produtos","tipo",30,true);
+            await float("produtos","valor",true);
+            await text("produtos","apelidos",false);
+
+            await varchar("checkins","userId",64,true);
+            await varchar("checkins","dono",160,true);
+            await varchar("checkins","modelo",160,true);
+            await varchar("checkins","placa",16,true);
+            await varchar("checkins","piloto",160,true);
+            await integer("checkins","km",true);
+            await varchar("checkins","data",10,true);
+            await varchar("checkins","horaChegada",8,false);
+            await float("checkins","total",true);
+            await text("checkins","observacao",false);
+
+            await varchar("checkin_itens","userId",64,true);
+            await varchar("checkin_itens","checkinId",64,true);
+            await varchar("checkin_itens","placa",16,true);
+            await varchar("checkin_itens","data",10,true);
+            await varchar("checkin_itens","productId",64,false);
+            await varchar("checkin_itens","nome",200,true);
+            await integer("checkin_itens","quantidade",true);
+            await float("checkin_itens","valorUnitario",true);
+            await float("checkin_itens","subtotal",true);
+
+            await sleep(3000);
+
+            await idx("produtos","idx_prod_user",["userId"]);
+            await idx("checkins","idx_chk_user",["userId"]);
+            await idx("checkins","idx_chk_placa",["placa"]);
+            await idx("checkins","idx_chk_data",["data"]);
+            await idx("checkin_itens","idx_item_user",["userId"]);
+            await idx("checkin_itens","idx_item_checkin",["checkinId"]);
+            await idx("checkin_itens","idx_item_placa",["placa"]);
+            console.log("MOTOGASTO VISTORIA CONFIGURADO COM SUCESSO");
+          }
+
+          main().catch(e=>{console.error(e);process.exit(1)});
+          NODE
